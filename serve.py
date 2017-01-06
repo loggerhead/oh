@@ -1,27 +1,44 @@
 #!/usr/bin/python
+from __future__ import print_function
+import sys
 import time
 import argparse
 import threading
 import functools
-import SocketServer
 
 
-PRINT_OUT = False
+if sys.version_info[0] == 2:
+    import SocketServer
+else:
+    import socketserver as SocketServer
+    ord = lambda b: b
+
+
 BUF_SIZE = 8192
-p = lambda *args, **kwargs: ()
+DEFAULT = {
+    'host': '127.0.0.1',
+    'port': 9000,
+    'limit': 40,
+}
 
 
-def pretty_print(fmt, data, mode=None, limit=None):
+def pp(fmt, *args, **kwargs):
+    if kwargs.get('fire'):
+        msg = fmt.format(*args, data=format_bytes(**kwargs))
+        print(msg)
+
+
+def format_bytes(data, mode=None, limit=None, **kwargs):
     if mode == 'hex':
         data = map(lambda b: format(ord(b), '02x'), data)
     else:
         data = map(ord, data)
+    data = list(data)
 
     if limit is not None and len(data) > limit:
-        fmt += ' ... (%d)'
-        print(fmt % (data[:limit], len(data)))
+        return '{} ... ({}/{})'.format(data[:limit], limit, len(data))
     else:
-        print(fmt % data)
+        return '{}'.format(data)
 
 
 class TcpEchoHandler(SocketServer.BaseRequestHandler):
@@ -30,7 +47,7 @@ class TcpEchoHandler(SocketServer.BaseRequestHandler):
             data = self.request.recv(BUF_SIZE)
             if len(data) == 0:
                 break
-            p('%s', data)
+            pp('{data}', data=data)
             self.request.sendall(data)
 
 
@@ -38,7 +55,10 @@ class UdpEchoHandler(SocketServer.BaseRequestHandler):
     def handle(self):
         data = self.request[0]
         conn = self.request[1]
-        p('%s =>\n    %s', conn, data)
+        pp('{}:{} =>\n    {data}',
+           self.client_address[0],
+           self.client_address[1],
+           data=data)
         conn.sendto(data, self.client_address)
 
 
@@ -51,18 +71,21 @@ class ThreadedUDPServer(SocketServer.ThreadingMixIn, SocketServer.UDPServer):
 
 
 def start_tcp_server(addr):
+    SocketServer.TCPServer.allow_reuse_address = True
     s = ThreadedTCPServer(addr, TcpEchoHandler)
     s.serve_forever()
 
 
 def start_udp_server(addr):
+    SocketServer.UDPServer.allow_reuse_address = True
     s = ThreadedUDPServer(addr, UdpEchoHandler)
+    s.allow_reuse_address = True
     s.serve_forever()
 
 
-def main(args):
+def run_servers(args):
     addr = (args['host'], args['port'])
-    print("start echo server...")
+    print("start echo server on {}:{}...".format(*addr))
     threads = [
         threading.Thread(target=start_tcp_server, args=(addr,)),
         threading.Thread(target=start_udp_server, args=(addr,)),
@@ -75,20 +98,34 @@ def main(args):
         time.sleep(1)
 
 
-if __name__ == '__main__':
+def main():
     desc = '''A simple TCP/UDP echo server.'''
     parser = argparse.ArgumentParser(description=desc)
-    parser.add_argument('--host', default='127.0.0.1',
-                        help='host that echo server bind to')
-    parser.add_argument('--port', type=int, default=9000,
-                        help='port that echo server bind to')
+    parser.add_argument('--host', default=DEFAULT['host'],
+                        help='server address [default: {}]'
+                        .format(DEFAULT['host']))
+    parser.add_argument('--port', type=int, default=DEFAULT['port'],
+                        help='server port [default: {}]'
+                        .format(DEFAULT['port']))
     parser.add_argument('--print', action='store_true',
                         help='print out what received')
+    parser.add_argument('--limit', type=int, default=DEFAULT['limit'],
+                        help='print out how many bytes [default: {}]'
+                        .format(DEFAULT['limit']))
+    parser.add_argument('--hex', action='store_true',
+                        help='print bytes with hex format')
     args = vars(parser.parse_args())
 
-    PRINT_OUT = args['print']
-    p = functools.partial(pretty_print, mode='hex', limit=40)
+    if args['print']:
+        mode = 'hex' if args['hex'] else None
+        limit = args['limit']
+        global pp
+        pp = functools.partial(pp, fire=True, mode=mode, limit=limit)
     try:
-        main(args)
+        run_servers(args)
     except KeyboardInterrupt:
         pass
+
+
+if __name__ == '__main__':
+    main()
