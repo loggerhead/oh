@@ -2,7 +2,7 @@ from setuptools import setup
 
 setup(
     name='oh',
-    version='0.1.0',
+    version='0.1.1',
     description='A simple TCP/UDP echo server',
     author='loggerhead',
     author_email='lloggerhead@gmail.com',
