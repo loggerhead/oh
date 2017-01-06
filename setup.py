@@ -7,12 +7,13 @@ setup(
     author='loggerhead',
     author_email='lloggerhead@gmail.com',
     url='https://github.com/loggerhead/oh',
+    license='MIT',
     keywords=('debug', 'echo', 'TCP', 'UDP'),
+    py_modules=['oh'],
     entry_points='''
         [console_scripts]
-        oh=serve:main
+        oh=oh:main
     ''',
-    license='MIT',
     classifiers=[
         'Development Status :: 4 - Beta',
         'License :: OSI Approved :: MIT License',
